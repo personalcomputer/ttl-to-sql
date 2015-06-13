@@ -122,10 +122,12 @@ def main():
 
     os.remove(database_filename)
 
-  #recreate db schema
+  #open & configure db
   conn = sqlite3.connect(database_filename)
   c = conn.cursor()
   c.execute('CREATE TABLE triples (subject TEXT, predicate TEXT, object TEXT)')
+  c.execute('PRAGMA synchronous = OFF')
+  c.execute('PRAGMA journal_mode = MEMORY')
   conn.commit()
 
   line_number = 0
@@ -136,20 +138,16 @@ def main():
     if entry[0] == '#':
       continue
 
-    s = ''
-    p = ''
-    o = ''
-
     try:
       s,p,o = parse_entry(entry)
+      c.execute("INSERT INTO triples VALUES (?,?,?)", (s, p, o))
+      uncommitted_entries_accumulator += 1
+
     except ParseError as e:
       print('\n'+str(e))
       print('failed on line #'+str(line_number)+': '+entry)
       error_accumulator += 1
       #sys.exit(1)
-
-    c.execute("INSERT INTO triples VALUES (?,?,?)", (s, p, o))
-    uncommitted_entries_accumulator += 1
 
     if uncommitted_entries_accumulator >= entries_per_transaction:
       conn.commit()
@@ -171,6 +169,8 @@ def main():
     create_index(conn, c, 'object')
 
   conn.close()
+
+  ttl.close()
 
 if __name__ == '__main__':
   main()
