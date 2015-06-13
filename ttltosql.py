@@ -93,7 +93,7 @@ def parse_entry(entry):
 
 def create_index(conn, c, table_name, column):
   print('Creating '+column+' index...')
-  c.execute('CREATE INDEX '+column+'_index ON '+table_name+'('+column+')')
+  c.execute('CREATE INDEX '+table_name+'_'+column+'_index ON '+table_name+'('+column+')')
   conn.commit()
 
 def table_exists(c, table_name):
@@ -138,7 +138,7 @@ def main():
     if overwrite in ['y','Y','yes']:
       os.remove(database_filename)
     else:
-      print('Inserting into existing database.')
+      print('Inserting into existing database...')
       is_new_database = False
 
   #open & configure db
