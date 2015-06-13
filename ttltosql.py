@@ -7,7 +7,14 @@ import sqlite3
 #http://www.w3.org/TR/n-triples/
 #http://www.w3.org/TeamSubmission/turtle/
 
-usage = 'Usage: '+sys.argv[0]+' TTL_FILE SQLITE3_FILE'
+default_table = 'triples'
+
+usage = 'Usage: '+sys.argv[0]+''' TTL_FILE SQLITE3_FILE [OPTION]...
+Import N-Triple (Turtle subset) file into SQL database.
+
+  --table      Database table name (default: '''+default_table+''')
+
+https://github.com/personalcomputer/ttl-to-sql'''
 
 create_indices = True
 
@@ -84,9 +91,9 @@ def parse_entry(entry):
 
   return subject_s.decode(ttl_encoding), predicate_s.decode(ttl_encoding), object_s.decode(ttl_encoding)
 
-def create_index(conn, c, column):
+def create_index(conn, c, table, column):
   print('Creating '+column+' index...')
-  c.execute('CREATE INDEX '+column+'i ON triples('+column+')')
+  c.execute('CREATE INDEX '+column+'_index ON '+table+'('+column+')')
   conn.commit()
 
 def main():
@@ -94,6 +101,7 @@ def main():
 
   ttl_filename = ''
   database_filename = ''
+  table_name = default_table
   try:
     ttl_filename = args[0]
   except IndexError:
@@ -104,11 +112,17 @@ def main():
   except IndexError:
     print('No sqlite3 database supplied.\n'+usage)
     sys.exit(1)
+  if(len(args)>3):
+    #Use python argparse if any more options are added
+    if args[2] == '--table':
+      assert(len(args)>=4)
+      table_name = args[3]
+      assert(table_name.strip() != '')
+
 
   if not os.path.exists(ttl_filename):
     print('Supplied ttl file "'+ttl_filename+'" does not exist.\n'+usage)
     sys.exit(1)
-
 
   ttl = open(ttl_filename)
   ttl_filesize = os.stat(ttl_filename).st_size
@@ -116,16 +130,17 @@ def main():
   #delete db (when it exists)
   if os.path.exists(database_filename):
     overwrite = raw_input('Overwrite '+database_filename+'? (y/N): ')
-    if overwrite not in ['y','Y','yes']:
-      print('Aborting')
-      sys.exit(0)
-
-    os.remove(database_filename)
+    if overwrite in ['y','Y','yes']:
+      os.remove(database_filename)
+    else:
+      print('Inserting into existing database.')
 
   #open & configure db
   conn = sqlite3.connect(database_filename)
   c = conn.cursor()
-  c.execute('CREATE TABLE triples (subject TEXT, predicate TEXT, object TEXT)')
+  c.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="'+table_name+'"')
+  new_table = c.fetchone() == None
+  c.execute('CREATE TABLE IF NOT EXISTS '+table_name+' (subject TEXT, predicate TEXT, object TEXT)')
   c.execute('PRAGMA synchronous = OFF')
   c.execute('PRAGMA journal_mode = MEMORY')
   conn.commit()
@@ -140,7 +155,7 @@ def main():
 
     try:
       s,p,o = parse_entry(entry)
-      c.execute("INSERT INTO triples VALUES (?,?,?)", (s, p, o))
+      c.execute('INSERT INTO '+table_name+' VALUES (?,?,?)', (s, p, o))
       uncommitted_entries_accumulator += 1
 
     except ParseError as e:
@@ -162,11 +177,11 @@ def main():
   sys.stdout.write('\n') #next line, no more progress reports
   conn.commit() #in case they ctrl+c the first index and there is an uncommitted transaction (n < entries_per_transaction)
 
-  #indices:
-  if create_indices:
-    create_index(conn, c, 'subject')
-    create_index(conn, c, 'predicate')
-    create_index(conn, c, 'object')
+  #indices
+  if new_table and create_indices:
+    create_index(conn, c, table_name, 'subject')
+    create_index(conn, c, table_name, 'predicate')
+    create_index(conn, c, table_name, 'object')
 
   conn.close()
 
