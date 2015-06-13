@@ -9,6 +9,8 @@ import sqlite3
 
 usage = 'Usage: '+sys.argv[0]+' TTL_FILE SQLITE3_FILE'
 
+create_indices = True
+
 ttl_encoding = 'utf-8'
 
 entries_per_transaction = 10000
@@ -36,7 +38,7 @@ def parse_entry(entry):
   object_start = None
 
   #_Extremely ugly_ manual grammar parsing. Not using regex or parser generators for speed. (This tool was written for a database with 6 million entries.)
-  #Regardless, custom parsers are unnacceptably ugly and not maintainable, so if even a tiny new feature is supported this will be converted to use a parser generator.
+  #Regardless, custom parsers are unacceptably ugly and not maintainable, so if even a tiny new feature is supported this will be converted to use a parser generator.
   #If I need more speed I will port the entire project to C++. It is quite small so porting is not an issue. (SQLITE3 certainly is also a large bottleneck, but parsing is even worse. Logic could reasonably be around ~30x+ faster than python, and the sqlite3 behavior can be massively improved with minimal effort. See the readme.md.)
   for i,c in enumerate(entry):
     if not subject_s:
@@ -81,6 +83,11 @@ def parse_entry(entry):
     #  raise ParseError('Unexpected '+str(c)+' at char '+str(i))
 
   return subject_s.decode(ttl_encoding), predicate_s.decode(ttl_encoding), object_s.decode(ttl_encoding)
+
+def create_index(conn, c, column):
+  print('Creating '+column+' index...')
+  c.execute('CREATE INDEX '+column+'i ON triples('+column+')')
+  conn.commit()
 
 def main():
   args = sys.argv[1:]
@@ -148,10 +155,20 @@ def main():
       conn.commit()
       uncommitted_entries_accumulator = 0
 
-      #also report status
+      #also report progress
       percent_progress = (ttl.tell()/float(ttl_filesize))*100
       percent_error = (error_accumulator/float(line_number))*100
-      sys.stdout.write('Conversion Status: {0} entries, progress: {1:.2f}% ({2:.6f}% errors)\r'.format(line_number, percent_progress, percent_error))
+      sys.stdout.write('Conversion Progress: {0} entries, progress: {1:.2f}% ({2:.6f}% errors)\r'.format(line_number, percent_progress, percent_error))
+      sys.stdout.flush()
+
+  sys.stdout.write('\n') #next line, no more progress reports
+  conn.commit() #in case they ctrl+c the first index and there is an uncommitted transaction (n < entries_per_transaction)
+
+  #indices:
+  if create_indices:
+    create_index(conn, c, 'subject')
+    create_index(conn, c, 'predicate')
+    create_index(conn, c, 'object')
 
   conn.close()
 

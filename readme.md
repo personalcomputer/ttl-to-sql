@@ -1,7 +1,7 @@
 SQL Database Turtle (.ttl) Importer
 -----------------------------------
 
-Small python script built to import Turtle RDF (http://www.w3.org/TeamSubmission/turtle/) files into an indexed database. By default it builds a naive database containing a single 'triples' table.
+Small python script built to import Turtle RDF (http://www.w3.org/TeamSubmission/turtle/) files into an indexed database. By default it builds a naive database containing a single 'triples' table, with an index on every column for full RDF "graph" querying.
 
 Usage: `ttltosql.py TTL_FILE SQLITE3_FILE`
 
