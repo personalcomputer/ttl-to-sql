@@ -1,7 +1,7 @@
 SQL Database Turtle (.ttl) Importer
 -----------------------------------
 
-Small python script built to import Turtle RDF (http://www.w3.org/TeamSubmission/turtle/) files into an indexed database. By default it builds a naive database containing a single 'triples' table, with an index on every column for full RDF "graph" querying.
+Small python script built to import Turtle RDF (http://www.w3.org/TeamSubmission/turtle/) files into an indexed database. By default it builds a naive database containing a single 'triples' table, with an index on every column for full RDF graph querying.
 
 Usage: `ttltosql.py TTL_FILE SQLITE3_FILE`
 
@@ -11,9 +11,9 @@ Dependencies: No extra work needed, everything required is included in a standar
 
 This only parses the simplest of .ttl files. No prefixes supported at all. Check your data, it may already be largely in the simple supported N-Triples format. The converter drops unparsable lines as it goes, and logs their frequency in the progress update messages.
 
-### Performance
+### Conversion Performance
 
-Fairly terrible. This was meant to be about 1 hour worth of work (and it was), and because of that I did not really optimize except for 1 thing. It processes about 200000 triples a minute, with the largest issues being the parser, and transactions overhead. If this tool receives continued interest on my part, it will be rewritten in C++ and massively upgraded:
+Fairly terrible. This was meant to be about 1 hour worth of work (and it was), and because of that I did not really optimize much. It processes about 200000 triples a minute, with the largest issues being the parser, and transactions overhead. If this tool receives continued interest on my part, it will be rewritten in C++ and massively upgraded:
 
 ### Future Upgrades
 
