@@ -91,10 +91,14 @@ def parse_entry(entry):
 
   return subject_s.decode(ttl_encoding), predicate_s.decode(ttl_encoding), object_s.decode(ttl_encoding)
 
-def create_index(conn, c, table, column):
+def create_index(conn, c, table_name, column):
   print('Creating '+column+' index...')
-  c.execute('CREATE INDEX '+column+'_index ON '+table+'('+column+')')
+  c.execute('CREATE INDEX '+column+'_index ON '+table_name+'('+column+')')
   conn.commit()
+
+def table_exists(c, table_name):
+  c.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="'+table_name+'"')
+  return c.fetchone() != None
 
 def main():
   args = sys.argv[1:]
@@ -127,23 +131,24 @@ def main():
   ttl = open(ttl_filename)
   ttl_filesize = os.stat(ttl_filename).st_size
 
-  #delete db (when it exists)
+  #prompt to overwrite
+  is_new_database = True
   if os.path.exists(database_filename):
     overwrite = raw_input('Overwrite '+database_filename+'? (y/N): ')
     if overwrite in ['y','Y','yes']:
       os.remove(database_filename)
     else:
       print('Inserting into existing database.')
+      is_new_database = False
 
   #open & configure db
   conn = sqlite3.connect(database_filename)
   c = conn.cursor()
-  c.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="'+table_name+'"')
-  new_table = c.fetchone() == None
+  is_new_table = not table_exists(c, table_name)
   c.execute('CREATE TABLE IF NOT EXISTS '+table_name+' (subject TEXT, predicate TEXT, object TEXT)')
-  c.execute('PRAGMA synchronous = OFF')
-  c.execute('PRAGMA journal_mode = MEMORY')
-  conn.commit()
+  if is_new_database:
+    c.execute('PRAGMA synchronous = OFF')
+    c.execute('PRAGMA journal_mode = MEMORY')
 
   line_number = 0
   uncommitted_entries_accumulator = 0 #accumulator style to allow tracking sql statements not raw entries (matters in the case of dropped invalid entries).
@@ -178,7 +183,7 @@ def main():
   conn.commit() #in case they ctrl+c the first index and there is an uncommitted transaction (n < entries_per_transaction)
 
   #indices
-  if new_table and create_indices:
+  if is_new_table and create_indices:
     create_index(conn, c, table_name, 'subject')
     create_index(conn, c, table_name, 'predicate')
     create_index(conn, c, table_name, 'object')
