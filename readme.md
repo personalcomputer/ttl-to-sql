@@ -12,7 +12,7 @@ Import N-Triple (Turtle subset) file into SQL database.
 
 Dependencies: No extra work needed, everything required is included in a standard python distribution. (ensure it was compiled with sqlite3 support)
 
-### Warning
+### Compatibility Warning
 
 This only parses the simplest of .ttl files - the subset conforming to the N-Triples standard. No prefixes supported at all. Check your data, it may already be largely in the simple supported N-Triples format. The converter drops unparsable lines as it goes, and logs their frequency in the progress update messages. (explicitly convert .ttl to N-Triples .nt with `rapper -i turtle -o ntriples example.ttl > example.nt`)
 
@@ -22,8 +22,7 @@ The converter was not initially created with performance in mind. It processes a
 
 ### Future Upgrades
 
-- Better and faster grammar parser. (largest perf issue)(raw UTF8, no translating from UTF8->python unicode->UTF8 (yes this takes a lot of time - I have no idea what python uses internally in-memory), multithread parsing, more straightforward parser with less branching, zero-allocation zero-copy strings) (how much effort here depending on how the profiling results change after porting, I'm surprised at how poorly my python logic has performed)
-- DB optimization
+- Better and faster grammar parser. (largest perf issue)(raw UTF8, no translating from UTF8->python unicode->UTF8 (yes this takes a lot of time - I have no idea what python uses internally in-memory), multithread parsing, more straightforward parser with less branching, zero-allocation zero-copy strings) (how much effort here depending on how the profiling results change after porting)
 - POSSIBLY better DB schema including more RDF information (some details, like datatype URIs, are dropped.)
 - Support for more sophisticated Turtle grammar
 - mmap on the .ttl

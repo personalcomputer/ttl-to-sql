@@ -7,7 +7,14 @@ import sqlite3
 #http://www.w3.org/TR/n-triples/
 #http://www.w3.org/TeamSubmission/turtle/
 
+
+#Configuration
 default_table = 'triples'
+
+create_indices = True
+ttl_encoding = 'utf-8'
+entries_per_transaction = 50000
+
 
 usage = 'Usage: '+sys.argv[0]+''' TTL_FILE SQLITE3_FILE [OPTION]...
 Import N-Triple (Turtle subset) file into SQL database.
@@ -16,11 +23,6 @@ Import N-Triple (Turtle subset) file into SQL database.
 
 https://github.com/personalcomputer/ttl-to-sql'''
 
-create_indices = True
-
-ttl_encoding = 'utf-8'
-
-entries_per_transaction = 10000
 
 class ParseError(Exception):
   def __init__(self, msg):
@@ -36,9 +38,9 @@ def parse_entry(entry):
   if entry[0] == '@':
     raise ParseError('ttl file uses advanced Turtle features. This converter only supports the very simplest of ttl files. (No prefixes supported at all)')
 
-  subject_s = ''
-  predicate_s = ''
-  object_s = ''
+  subject_uri = ''
+  predicate_uri = ''
+  object_uri = ''
 
   subject_start = None
   predicate_start = None
@@ -46,9 +48,8 @@ def parse_entry(entry):
 
   #_Extremely ugly_ manual grammar parsing. Not using regex or parser generators for speed. (This tool was written for a database with 6 million entries.)
   #Regardless, custom parsers are unacceptably ugly and not maintainable, so if even a tiny new feature is supported this will be converted to use a parser generator.
-  #If I need more speed I will port the entire project to C++. It is quite small so porting is not an issue. (SQLITE3 certainly is also a large bottleneck, but parsing is even worse. Logic could reasonably be around ~30x+ faster than python, and the sqlite3 behavior can be massively improved with minimal effort. See the readme.md.)
   for i,c in enumerate(entry):
-    if not subject_s:
+    if not subject_uri:
       if subject_start == None: #
         #first char of subject
         if c != '<':
@@ -56,10 +57,10 @@ def parse_entry(entry):
         subject_start = i
         continue
       elif c == '>':
-        subject_s = entry[subject_start:i+1]
+        subject_uri = entry[subject_start:i+1]
         continue
       continue
-    elif not predicate_s:
+    elif not predicate_uri:
       if predicate_start == None:
         #first char of predicate
         if c == ' ':
@@ -69,10 +70,10 @@ def parse_entry(entry):
         predicate_start = i
         continue
       elif c == '>':
-        predicate_s = entry[predicate_start:i+1]
+        predicate_uri = entry[predicate_start:i+1]
         continue
       continue
-    elif not object_s:
+    elif not object_uri:
       if object_start == None:
         #first char of object
         if c == ' ':
@@ -82,14 +83,14 @@ def parse_entry(entry):
         object_start = i
         continue
       elif c in ['>','"']:
-        object_s = entry[object_start:i+1]
+        object_uri = entry[object_start:i+1]
         #continue
         break
       continue
     #elif c not in ['.',' ','\n']:
     #  raise ParseError('Unexpected '+str(c)+' at char '+str(i))
 
-  return subject_s.decode(ttl_encoding), predicate_s.decode(ttl_encoding), object_s.decode(ttl_encoding)
+  return subject_uri.decode(ttl_encoding), predicate_uri.decode(ttl_encoding), object_uri.decode(ttl_encoding)
 
 def create_index(conn, c, table_name, column):
   print('Creating '+column+' index...')
@@ -99,6 +100,12 @@ def create_index(conn, c, table_name, column):
 def table_exists(c, table_name):
   c.execute('SELECT name FROM sqlite_master WHERE type="table" AND name="'+table_name+'"')
   return c.fetchone() != None
+
+def report_progress(ttl,ttl_filesize,error_accumulator,line_number):
+  percent_progress = (ttl.tell()/float(ttl_filesize))*100
+  percent_error = (error_accumulator/float(line_number))*100
+  sys.stdout.write('Conversion progress: {1:.2f}%, {0} entries ({2:.6f}% errors)\r'.format(line_number, percent_progress, percent_error))
+  sys.stdout.flush()
 
 def main():
   args = sys.argv[1:]
@@ -147,6 +154,7 @@ def main():
   is_new_table = not table_exists(c, table_name)
   c.execute('CREATE TABLE IF NOT EXISTS '+table_name+' (subject TEXT, predicate TEXT, object TEXT)')
   if is_new_database:
+    print('Inserting into new database "'+database_filename+'", configured '+('with indices and' if create_indices else '')+' for high-volume insertion...')
     c.execute('PRAGMA synchronous = OFF')
     c.execute('PRAGMA journal_mode = MEMORY')
 
@@ -174,13 +182,12 @@ def main():
       uncommitted_entries_accumulator = 0
 
       #also report progress
-      percent_progress = (ttl.tell()/float(ttl_filesize))*100
-      percent_error = (error_accumulator/float(line_number))*100
-      sys.stdout.write('Conversion Progress: {0} entries, progress: {1:.2f}% ({2:.6f}% errors)\r'.format(line_number, percent_progress, percent_error))
-      sys.stdout.flush()
+      report_progress(ttl,ttl_filesize,error_accumulator,line_number)
 
+  if uncommitted_entries_accumulator > 0:
+    conn.commit()
+  report_progress(ttl,ttl_filesize,error_accumulator,line_number)
   sys.stdout.write('\n') #next line, no more progress reports
-  conn.commit() #in case they ctrl+c the first index and there is an uncommitted transaction (n < entries_per_transaction)
 
   #indices
   if is_new_table and create_indices:
